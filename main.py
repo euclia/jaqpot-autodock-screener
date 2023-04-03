@@ -30,6 +30,14 @@ def create_minio_client(minio_service, minio_username, minio_password, secure):
     return minio_client, bucket_name
 
 
+def check_task_bucket(task_id):
+    exists = minio_client.bucket_exists(task_id)
+    if exists is False:
+        minio_client.make_bucket(task_id)
+    global task_bucket
+    task_bucket = task_id
+
+
 def download_pdb(pdb_file):
     print("Downloading pdb")
     bucket = pdb_file.split("/")[0]
@@ -37,12 +45,16 @@ def download_pdb(pdb_file):
     global protein_pdb
     protein_pdb = "./" + pdb_file_name
     minio_client.fget_object(bucket, pdb_file_name, protein_pdb)
+    minio_client.fput_object(bucket_name=task_bucket, object_name=pdb_file_name, file_path=pdb_file_name)
 
 
 def download_sdf(molecule_sdf):
     print("Downloading sdf")
     bucket = molecule_sdf.split("/")[0]
+    
+    global molecule_sdf_file
     molecule_sdf_file = molecule_sdf.split("/")[1]
+
     global molecule_sdf_local
     molecule_sdf_local = "./" + molecule_sdf_file
     minio_client.fget_object(bucket, molecule_sdf_file, molecule_sdf_local)
@@ -52,7 +64,6 @@ def download_sdf(molecule_sdf):
     sdf_file = molecule_sdf_local[:len(molecule_sdf_local)-3]
     with open(sdf_file, "wb") as sdf:
         sdf.write(file_content)
-
 
 def create_simple_docker(exhaustiv, num_modes, calc_charges=False, add_hydrogenes=False,  output="./tmp"):
     print("Creating docker")
@@ -71,7 +82,6 @@ def create_simple_docker(exhaustiv, num_modes, calc_charges=False, add_hydrogene
                         , calc_charges = calc_charges
                         , out_dir = output)
     return docker
-
 
 def start_docking(task_bucket, centroid, box_dims):
     print("Starting docking")
@@ -95,14 +105,16 @@ def start_docking(task_bucket, centroid, box_dims):
                                                             , ligand_file
                                                             , centroid=(centroid[0], centroid[1], centroid[2])
                                                             , box_dims=(box_dims[0], box_dims[1], box_dims[2]))
-                df = df.append({"Docking_molecule": Chem.MolToSmiles(mol, kekuleSmiles=True)
+                df = pd.concat([df, pd.DataFrame.from_records([{"Docking_molecule": Chem.MolToSmiles(mol, kekuleSmiles=True)
                                         , "Unique_ID": str(uniqueId)
                                         , "Docked_value_bfe": docked[0][1]
                                         , "Ligand_File_Docked": uniqueId + "_docked.pdbqt"
-                                        }
-                                    , ignore_index=True
-                                    )
+                                        }])])
                 df.to_csv('./results/results.csv', index=False)
+                minio_client.fput_object(bucket_name=task_bucket, object_name=str("results/" + molecule_sdf_file.split(".")[0] + "/results.csv"), file_path="./results/results.csv")
+                minio_client.fput_object(bucket_name=task_bucket, object_name=uniqueId + ".sdf", file_path=ligand_file)
+                minio_client.fput_object(bucket_name=task_bucket, object_name=uniqueId + "_docked.pdbqt", file_path="tmp/" + uniqueId + "_docked.pdbqt")
+
 
 def main(args):
     task_id = args.task_id
@@ -120,6 +132,7 @@ def main(args):
     s3_username = args.s3_username
     s3_password = args.s3_password
     create_minio_client(s3_service, s3_username, s3_password, s3_secure)
+    check_task_bucket(task_id=task_id)
     download_pdb(protein_pdb)
     download_sdf(molecule_sdf_file)
     create_simple_docker(exhaustiv=exhaustiveness, num_modes=num_modes, calc_charges=calc_charges, add_hydrogenes=add_hydrogenes)
@@ -149,4 +162,4 @@ if __name__ == "__main__":
 
 
 
-#python3 main.py -centroid "[0.0, 0.0, 0.0]" -t "sample_dock" -m "zinc012023/3D_BA_AAML_BAAAML.xaa.sdf.gz" -pdb "sampledocking/AF-Q7PRQ0-F1-model_v4.pdb" -box_dims "[20, 20, 20]"  -calc_charges True -add_hydrogens True -s3 "localhost:9000" -s3s "False" -usn "minioadmin" -pass "minioadmin" -exhaust "1" -poses "1"
+#python3 main.py -centroid "[4.0, -2.0, 2.0]" -t "sampledock" -m "zinc012023/3D_BA_AAML_BAAAML.xaa.sdf.gz" -pdb "sampledocking/AF-Q7PRQ0-F1-model_v4.pdb" -box_dims "[20, 20, 20]"  -calc_charges True -add_hydrogens True -s3 "localhost:9000" -s3s "False" -usn "minioadmin" -pass "minioadmin" -exhaust "1" -poses "1"

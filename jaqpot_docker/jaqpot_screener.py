@@ -85,13 +85,20 @@ def start_docking(task_bucket, centroid, box_dims):
                                                             , ligand_file
                                                             , centroid=(centroid[0], centroid[1], centroid[2])
                                                             , box_dims=(box_dims[0], box_dims[1], box_dims[2]))
-                df = df.append({"Docking_molecule": Chem.MolToSmiles(mol, kekuleSmiles=True)
+                
+                df = pd.concat([df, pd.DataFrame.from_records([{"Docking_molecule": Chem.MolToSmiles(mol, kekuleSmiles=True)
                                         , "Unique_ID": str(uniqueId)
                                         , "Docked_value_bfe": docked[0][1]
                                         , "Ligand_File_Docked": uniqueId + "_docked.pdbqt"
-                                        }
-                                    , ignore_index=True
-                                    )
+                                        }])])
+                
+                # df = df.append({"Docking_molecule": Chem.MolToSmiles(mol, kekuleSmiles=True)
+                #                         , "Unique_ID": str(uniqueId)
+                #                         , "Docked_value_bfe": docked[0][1]
+                #                         , "Ligand_File_Docked": uniqueId + "_docked.pdbqt"
+                #                         }
+                #                     , ignore_index=True
+                #                     )
                 df.to_csv('./results/results.csv', index=False)
 
 def main(args):
