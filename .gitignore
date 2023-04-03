@@ -1,0 +1,10 @@
+# created by virtualenv automatically
+/bin
+/share
+/tmp
+/results
+/share
+/lib
+pyvenv.cfg
+jaqpot_docker/__pycache__/__init__.cpython-38.pyc
+jaqpot_docker/__pycache__/autodock_docker.cpython-38.pyc
